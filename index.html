@@ -394,6 +394,16 @@
         .bg-laurel     { background: linear-gradient(135deg, #d9f99d, #bef264); }
         .text-laurel   { color: #3f6212; }
 
+        /* ── LOCATION DRAG ── */
+        .loc-grid .plant-card { cursor: grab; }
+        .loc-grid .plant-card:active { cursor: grabbing; }
+        .loc-section.drag-over > .loc-grid {
+            outline: 2px dashed #86efac;
+            border-radius: 12px;
+            background: rgba(134, 239, 172, 0.15);
+        }
+        .plant-card.loc-dragging { opacity: 0.25; }
+
         /* ── MOBILE CARD CLEANUP ── */
         .tag-mb { display: none; }
         @media (max-width: 767px) {
@@ -1273,6 +1283,82 @@ window.promptPurchasedDate = function(plantId) {
 };
 
 // ─────────────────────────────────────────────
+// Location overrides + drag-to-move
+// ─────────────────────────────────────────────
+function getEffectiveLocNo(plant) {
+    const v = localStorage.getItem('plantLoc_' + plant.id);
+    return v ? parseInt(v) : plant.locationNo;
+}
+function saveLocOverride(plantId, locNo) {
+    localStorage.setItem('plantLoc_' + plantId, locNo);
+}
+
+let drag = null;
+
+window.locCardDown = function(e, plantId) {
+    if (e.type === 'mousedown' && e.button !== 0) return;
+    const pt = e.touches ? e.touches[0] : e;
+    drag = { plantId, startX: pt.clientX, startY: pt.clientY, ghost: null, card: e.currentTarget };
+};
+
+function locMove(e) {
+    if (!drag) return;
+    const pt = e.touches ? e.touches[0] : e;
+    if (!drag.ghost && Math.hypot(pt.clientX - drag.startX, pt.clientY - drag.startY) > 8) {
+        const rect = drag.card.getBoundingClientRect();
+        drag.offsetX = drag.startX - rect.left;
+        drag.offsetY = drag.startY - rect.top;
+        const g = drag.card.cloneNode(true);
+        g.style.cssText = `position:fixed;width:${rect.width}px;height:${rect.height}px;opacity:0.85;pointer-events:none;z-index:999;transform:rotate(2deg) scale(1.05);box-shadow:0 12px 32px rgba(0,0,0,0.25);transition:none;border-radius:12px;`;
+        g.style.left = (pt.clientX - drag.offsetX) + 'px';
+        g.style.top  = (pt.clientY - drag.offsetY) + 'px';
+        document.body.appendChild(g);
+        drag.ghost = g;
+        drag.card.classList.add('loc-dragging');
+    }
+    if (drag.ghost) {
+        if (e.cancelable) e.preventDefault();
+        drag.ghost.style.left = (pt.clientX - drag.offsetX) + 'px';
+        drag.ghost.style.top  = (pt.clientY - drag.offsetY) + 'px';
+        document.querySelectorAll('.loc-section').forEach(s => s.classList.remove('drag-over'));
+        const t = locSectionAt(pt.clientX, pt.clientY);
+        if (t) t.classList.add('drag-over');
+    }
+}
+
+function locUp(e) {
+    if (!drag) return;
+    const pt = e.changedTouches ? e.changedTouches[0] : e;
+    if (drag.ghost) {
+        const t = locSectionAt(pt.clientX, pt.clientY);
+        if (t) saveLocOverride(drag.plantId, parseInt(t.dataset.locNo));
+        drag.ghost.remove();
+        drag.card.classList.remove('loc-dragging');
+        document.querySelectorAll('.loc-section').forEach(s => s.classList.remove('drag-over'));
+        drag = null;
+        renderLocations();
+    } else {
+        const id = drag.plantId;
+        drag = null;
+        openModal(id);
+    }
+}
+
+function locSectionAt(x, y) {
+    for (const s of document.querySelectorAll('.loc-section')) {
+        const r = s.getBoundingClientRect();
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return s;
+    }
+    return null;
+}
+
+document.addEventListener('mousemove', locMove);
+document.addEventListener('mouseup', locUp);
+document.addEventListener('touchmove', locMove, { passive: false });
+document.addEventListener('touchend', locUp);
+document.addEventListener('touchcancel', locUp);
+
+// ─────────────────────────────────────────────
 // Render: grid
 // ─────────────────────────────────────────────
 function renderGrid() {
@@ -1303,7 +1389,6 @@ function renderGrid() {
                 <div class="emoji-section">
                     <div class="water-tag ${plant.textClass} tag-mb">${getWaterStyle(plant)}</div>
                     <div class="card-pills">
-                        <div class="location-pill">📍 ${t(loc.shortName)}</div>
                         <div class="location-pill">☀️ ${LIGHT_LABEL[plant.light]}</div>${photoCounts[plant.id] ? `
                         <div class="location-pill">📷 ${photoCounts[plant.id]}</div>` : ''}
                     </div>
@@ -1328,7 +1413,7 @@ function renderLocations() {
 
     order.forEach(locNo => {
         const loc = LOCATIONS[locNo];
-        const inLoc = plants.filter(p => p.locationNo === locNo);
+        const inLoc = plants.filter(p => getEffectiveLocNo(p) === locNo);
         if (!inLoc.length) return;
 
         let cards = '';
@@ -1336,7 +1421,7 @@ function renderLocations() {
             const st = STATUS[plant.status];
             const photoSrc = latestPhotoUrls[plant.id] || plant.img;
             cards += `
-                <div class="plant-card ${plant.bgClass}${photoSrc ? ' has-photo' : ''}" style="animation-delay:${index * 0.04}s" onclick="openModal(${plant.id})">
+                <div class="plant-card ${plant.bgClass}${photoSrc ? ' has-photo' : ''}" style="animation-delay:${index * 0.04}s" onmousedown="locCardDown(event,${plant.id})" ontouchstart="locCardDown(event,${plant.id})">
                     ${photoSrc ? `<img class="card-photo" src="${photoSrc}" alt="" loading="lazy"><div class="card-scrim"></div>` : ''}
                     <div class="status-dot ${st.dot}"></div>
                     <div class="card-content">
@@ -1357,7 +1442,7 @@ function renderLocations() {
         });
 
         html += `
-            <div class="loc-section">
+            <div class="loc-section" data-loc-no="${locNo}">
                 <div class="loc-section-header">
                     <span class="loc-icon">${LOC_ICONS[locNo] || '📍'}</span>
                     <span class="loc-title">${t(loc.name)}</span>
@@ -1384,7 +1469,8 @@ window.openModal = function(plantId) {
 
     const ui = UI[lang];
     const st = STATUS[plant.status];
-    const loc = LOCATIONS[plant.locationNo];
+    const effectiveLocNo = getEffectiveLocNo(plant);
+    const loc = LOCATIONS[effectiveLocNo];
 
     document.getElementById('modalTitle').textContent = plant.nickname;
     document.getElementById('modalSubtitle').textContent = plant.latin + ' · ' + t(plant.fullName);
@@ -1405,7 +1491,7 @@ window.openModal = function(plantId) {
         </div>
 
         <div class="location-card">
-            <div class="loc-header">${ui.locationLabel} ${plant.locationNo === 8 ? '' : plant.locationNo + ' — '}${t(loc.name)}</div>
+            <div class="loc-header">${ui.locationLabel} ${effectiveLocNo === 8 ? '' : effectiveLocNo + ' — '}${t(loc.name)}</div>
             <div class="loc-detail">${t(plant.locationDetail)}</div>
         </div>
 
