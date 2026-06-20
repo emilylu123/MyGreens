@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push *)",
+      "Bash(find /private/tmp/claude-501 -name \"*.jpg\" -o -name \"*.png\" -o -name \"*.webp\" 2>/dev/null | head -10)",
+      "Read(//private/tmp/claude-501/**)",
+      "Bash(find /var/folders -name \"*.jpg\" -newer /Users/emily/Desktop/Greens/images/cici.jpg 2>/dev/null | head -5 *)",
+      "Read(//private/var/folders/**)",
+      "Read(//Users/emily/Library/Caches/**)"
+    ]
+  }
+}
