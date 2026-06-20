@@ -2,7 +2,7 @@
 
 A personal plant care website tracking 14 houseplants and outdoor plants in Adelaide, Australia.
 
-**Live site:** https://emilylu123.github.io/MyGreens/
+**Live site:** <https://emilylu123.github.io/MyGreens/>
 
 ---
 

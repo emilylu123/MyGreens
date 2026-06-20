@@ -66,8 +66,8 @@
         #grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            grid-auto-rows: calc((100vh - 64px) / 3);
-            grid-auto-rows: calc((100dvh - 64px) / 3);
+            grid-auto-rows: calc((100vh - 58px) / 3 - 4px);
+            grid-auto-rows: calc((100dvh - 58px) / 3 - 4px);
             gap: 3px;
             padding: 3px;
         }
@@ -154,7 +154,7 @@
             .plant-card:not(.has-photo) { padding: 1rem; min-height: 165px; }
         }
 
-        .nickname { font-size: 1.05rem; font-weight: bold; line-height: 1.15; margin-bottom: 0.1rem; word-break: break-word; }
+        .nickname { font-size: 1.05rem; font-weight: bold; line-height: 1.15; margin-bottom: 0.1rem; white-space: nowrap; }
         .subtitle  {
             font-size: 0.64rem; font-weight: 500; opacity: 0.75; margin-bottom: 0.25rem; line-height: 1.25;
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -206,7 +206,7 @@
         .card-pills .location-pill { margin-bottom: 0; background: none; padding: 0.08rem 0; }
         .emoji-rating { font-size: 0.76rem; letter-spacing: 0.5px; white-space: nowrap; line-height: 1.25; }
         @media (min-width: 768px) { .emoji-rating { font-size: 1.05rem; letter-spacing: 2px; } }
-        .name-row { display: flex; align-items: center; justify-content: space-between; gap: 0.35rem; }
+        .name-row { display: flex; align-items: center; justify-content: space-between; gap: 0.35rem; flex-wrap: wrap; }
         .water-tag {
             font-size: 0.55rem; font-weight: 700;
             padding: 0.1rem 0.45rem; border-radius: 20px;
@@ -393,6 +393,15 @@
         .text-niaoniao { color: #065f46; }
         .bg-laurel     { background: linear-gradient(135deg, #d9f99d, #bef264); }
         .text-laurel   { color: #3f6212; }
+
+        /* ── MOBILE CARD CLEANUP ── */
+        .tag-mb { display: none; }
+        @media (max-width: 767px) {
+            .subtitle { display: none !important; }
+            .emoji-rating { display: none; }
+            .tag-dt { display: none !important; }
+            .tag-mb { display: block; text-align: right; }
+        }
     </style>
 </head>
 <body>
@@ -458,6 +467,8 @@ const UI = {
         deletePhoto: '删除', closePhoto: '关闭',
         confirmDelete: '删除这张照片？',
         photoNote: '照片只保存在这台设备上',
+        purchased: '购入日期',
+        notSet: '未记录',
     },
     en: {
         gridView: '🪴 Cards', locView: '📍 Rooms',
@@ -474,6 +485,8 @@ const UI = {
         deletePhoto: 'Delete', closePhoto: 'Close',
         confirmDelete: 'Delete this photo?',
         photoNote: 'Photos are stored on this device only',
+        purchased: 'Purchased',
+        notSet: 'Not recorded',
     },
 };
 
@@ -831,7 +844,7 @@ const plants = [
         fullName: { zh: '白掌 · Peace Lily', en: 'Peace Lily · 白掌' },
         sept: { zh: '移到稍亮的散射光位置促开花。恢复每月平衡液肥（6月换盆已过安全期）。', en: 'Move to slightly brighter indirect light to trigger flowering. Resume balanced monthly feed (safe now after the June repot).' },
         light: 1, water: 4, humidity: 3, img: 'images/lili.jpg', bgClass: 'bg-lili', textClass: 'text-lili',
-        status: 'ok', locationNo: 5, waterStyle: { zh: '等叶下垂再浇', en: 'Wait for droop' },
+        status: 'ok', locationNo: 5, waterStyle: { zh: '叶垂再浇', en: 'Wait droop' },
         short: {
             zh: '叶片下垂=浇水信号。已换盆，恢复良好。',
             en: 'Drooping = watering signal. Recently repotted, settling well.',
@@ -1233,6 +1246,33 @@ window.closeLightbox = function(event) {
 };
 
 // ─────────────────────────────────────────────
+// Purchased dates (localStorage)
+// ─────────────────────────────────────────────
+function getPurchasedDate(plantId) {
+    return localStorage.getItem('plantPurchased_' + plantId) || null;
+}
+
+function fmtDateLocal(dateStr) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(
+        lang === 'zh' ? 'zh-CN' : 'en-AU',
+        { year: 'numeric', month: 'short', day: 'numeric' }
+    );
+}
+
+window.promptPurchasedDate = function(plantId) {
+    const input = document.createElement('input');
+    input.type = 'date';
+    const current = getPurchasedDate(plantId);
+    if (current) input.value = current;
+    input.onchange = () => {
+        if (input.value) localStorage.setItem('plantPurchased_' + plantId, input.value);
+        openModal(plantId);
+    };
+    input.click();
+};
+
+// ─────────────────────────────────────────────
 // Render: grid
 // ─────────────────────────────────────────────
 function renderGrid() {
@@ -1255,12 +1295,13 @@ function renderGrid() {
                 <div class="card-content">
                     <div class="name-row">
                         <div class="nickname ${plant.textClass}">${plant.nickname}</div>
-                        <div class="water-tag ${plant.textClass}">${getWaterStyle(plant)}</div>
+                        <div class="water-tag ${plant.textClass} tag-dt">${getWaterStyle(plant)}</div>
                     </div>
-                    <div class="subtitle ${plant.textClass}">${plant.fullName.en}</div>
+                    <div class="subtitle ${plant.textClass}">${t(plant.fullName)}</div>
                     <div class="short-desc ${plant.textClass}">${t(plant.short)}</div>
                 </div>
                 <div class="emoji-section">
+                    <div class="water-tag ${plant.textClass} tag-mb">${getWaterStyle(plant)}</div>
                     <div class="card-pills">
                         <div class="location-pill">📍 ${t(loc.shortName)}</div>
                         <div class="location-pill">☀️ ${LIGHT_LABEL[plant.light]}</div>${photoCounts[plant.id] ? `
@@ -1300,7 +1341,7 @@ function renderLocations() {
                     <div class="status-dot ${st.dot}"></div>
                     <div class="card-content">
                         <div class="nickname ${plant.textClass}">${plant.nickname}</div>
-                        <div class="subtitle ${plant.textClass}">${plant.fullName.en}</div>
+                        <div class="subtitle ${plant.textClass}">${t(plant.fullName)}</div>
                         <div class="short-desc ${plant.textClass}">${t(plant.short)}</div>
                     </div>
                     <div class="emoji-section">
@@ -1380,6 +1421,13 @@ window.openModal = function(plantId) {
             <div class="info-label">${ui.humidity}</div>
             <div class="info-value">${'💦'.repeat(plant.humidity)} (${plant.humidity}/4)</div>
         </div>
+        ${(() => {
+            const pd = getPurchasedDate(plant.id);
+            return `<div class="info-row" style="cursor:pointer" onclick="promptPurchasedDate(${plant.id})">
+            <div class="info-label">${ui.purchased}</div>
+            <div class="info-value" style="${!pd ? 'color:#9ca3af' : ''}">${pd ? fmtDateLocal(pd) : ui.notSet} <span style="font-size:0.72rem;opacity:0.45">✏️</span></div>
+        </div>`;
+        })()}
 
         <div class="section-title ${plant.textClass}">${ui.intro}</div>
         <div class="section-content">${t(plant.description)}</div>
@@ -1453,17 +1501,18 @@ window.toggleLang = function() {
 
 function syncControls() {
     const ui = UI[lang];
+    const isMobile = window.innerWidth < 768;
     const bGrid = document.getElementById('btnGrid');
     const bLoc = document.getElementById('btnLoc');
     const bLight = document.getElementById('btnLight');
     const bWater = document.getElementById('btnWater');
     const bHumidity = document.getElementById('btnHumidity');
 
-    bGrid.textContent = ui.gridView;
-    bLoc.textContent = ui.locView;
-    bLight.textContent = ui.sortLight;
-    bWater.textContent = ui.sortWater;
-    bHumidity.textContent = ui.sortHumidity;
+    bGrid.textContent = isMobile ? '🪴' : ui.gridView;
+    bLoc.textContent = isMobile ? '📍' : ui.locView;
+    bLight.textContent = isMobile ? '☀️' : ui.sortLight;
+    bWater.textContent = isMobile ? '💧' : ui.sortWater;
+    bHumidity.textContent = isMobile ? '💦' : ui.sortHumidity;
     document.getElementById('seasonTag').textContent = ui.season;
 
     bGrid.classList.toggle('active', view === 'grid');
